@@ -1,58 +1,70 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from lifelines import KaplanMeierFitter
+
 from src.simulation import simulate_cohort
-from src.llm_layer import generate_insights, suggest_genes_for_perturbation, memory
 from src.utils import plot_lesion_matrix, plot_kaplan_meier
-from io import BytesIO
+from src.llm_layer import generate_insights, suggest_genes_for_perturbation
 
-st.set_page_config(page_title="MS Simulation + ChatGroq", layout="wide")
-st.title("🧬 MS Simulation, Kaplan-Meier & ChatGroq Chat")
+st.set_page_config(page_title="Synthovion: MS Simulation + ChatGroq", layout="wide")
 
-# --- Inputs ---
-num_patients = st.slider("Number of Patients", 5, 50, 20)
-duration = st.slider("Simulation Duration (days)", 10, 100, 50)
-drug_effectiveness = st.slider("Treatment Strength (0=none, 1=full)", 0.0, 1.0, 0.2, 0.05)
-remission_chance = st.slider("Remission Chance per Day", 0.0, 0.5, 0.05, 0.01)
-immune_variability = st.slider("Immune Activity Variability", 0.0, 0.5, 0.1, 0.05)
+st.title("🧬 Synthovion: Multiple Sclerosis Simulation & ChatGroq Insights")
 
-simulate_genes = st.checkbox("Use Initial Gene Perturbations", True)
-gene_factors = None
-if simulate_genes:
-    gene_factors = {
-        "GeneA": {"immune": np.random.uniform(-0.1,0.1), "neuron": np.random.uniform(-0.1,0.1)},
-        "GeneB": {"immune": np.random.uniform(-0.1,0.1), "neuron": np.random.uniform(-0.1,0.1)},
-    }
+# --- Sidebar for simulation parameters ---
+st.sidebar.header("Simulation Settings")
+num_patients = st.sidebar.slider("Number of patients", min_value=10, max_value=100, value=20, step=5)
+timesteps = st.sidebar.slider("Time steps", min_value=10, max_value=100, value=30, step=5)
+drug_effectiveness = st.sidebar.slider("Drug Effectiveness", min_value=0.0, max_value=1.0, value=0.5)
+gene_factors = st.sidebar.text_area("Hypothetical gene effects (comma-separated)", value="GeneA,GeneB,GeneC")
 
+# --- Run Simulation ---
 if st.button("Run Simulation + ChatGroq"):
+    # Simulate cohort
     times, lesion_matrix = simulate_cohort(
         num_patients=num_patients,
-        timesteps=duration,
+        timesteps=timesteps,
         drug_effectiveness=drug_effectiveness,
-        gene_factors=gene_factors,
-        remission_chance=remission_chance,
-        immune_variability=immune_variability
+        gene_factors=gene_factors.split(","),
     )
 
-    # --- Lesion Trajectories Plot ---
-    st.subheader("📊 Lesion Trajectories")
-    st.pyplot(plot_lesion_matrix(times, lesion_matrix, max_patients=min(10,num_patients)))
+    # --- Tabs ---
+    tabs = st.tabs(["📈 Lesion Trajectories", "🩺 Kaplan-Meier", "💬 ChatGroq Insights", "🎲 Random Predictions"])
 
-    # --- Kaplan-Meier Plot ---
-    st.subheader("📈 Lesion-Free Probability (Kaplan-Meier)")
-    st.pyplot(plot_kaplan_meier(lesion_matrix, threshold=5))
+    # --- Tab 1: Lesion trajectories ---
+    with tabs[0]:
+        st.subheader("MS Lesion Trajectories")
+        plot_lesion_matrix(times, lesion_matrix, max_patients=min(num_patients, 10))
+        st.caption("Each line represents a simulated patient's lesion count over time.")
 
-    # --- ChatGroq Insights ---
-    st.subheader("💬 ChatGroq Insights")
-    insights = generate_insights(lesion_matrix, top_genes=list(gene_factors.keys()) if gene_factors else None)
-    st.text_area("ChatGroq Output", insights, height=300)
+    # --- Tab 2: Kaplan-Meier ---
+    with tabs[1]:
+        st.subheader("Kaplan-Meier: Lesion-Free Survival")
+        plot_kaplan_meier(lesion_matrix, threshold=5)
+        st.caption("Probability of remaining below threshold lesions over time.")
 
-    # --- Suggested Gene Perturbations ---
-    suggested_genes = suggest_genes_for_perturbation(lesion_matrix, num_genes=3)
-    if suggested_genes:
-        st.markdown("**ChatGroq Suggested Gene Perturbations:**")
-        for gene,effects in suggested_genes.items():
-            st.markdown(f"- **{gene}** → Immune effect: {effects['immune']:.2f}, Neuron effect: {effects['neuron']:.2f}")
+    # --- Tab 3: ChatGroq insights ---
+    with tabs[2]:
+        st.subheader("ChatGroq Insights")
+        try:
+            insights = generate_insights(lesion_matrix, top_genes=gene_factors.split(","))
+            st.text_area("ChatGroq Output", insights, height=300)
 
-# Optional: View memory
-if st.checkbox("Show Chat Memory"):
-    st.json(memory.chat_memory.messages)
+            perturbations = suggest_genes_for_perturbation(lesion_matrix, num_genes=3)
+            st.subheader("Suggested Gene Perturbations")
+            st.json(perturbations)
+        except Exception as e:
+            st.error(f"ChatGroq failed: {e}")
+
+    # --- Tab 4: Random Predictions ---
+    with tabs[3]:
+        st.subheader("Randomized New Patient Simulation")
+        n_new = st.slider("Number of new patients", min_value=1, max_value=20, value=5)
+        times_new, lesion_matrix_new = simulate_cohort(
+            num_patients=n_new,
+            timesteps=timesteps,
+            drug_effectiveness=drug_effectiveness,
+            gene_factors=gene_factors.split(","),
+        )
+        plot_lesion_matrix(times_new, lesion_matrix_new, max_patients=n_new)
