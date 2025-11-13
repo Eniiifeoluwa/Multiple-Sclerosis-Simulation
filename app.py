@@ -3,8 +3,9 @@ import streamlit as st
 import numpy as np
 from src.simulation import simulate_cohort
 from src.utils import plot_lesion_matrix, plot_kaplan_meier
-from src.llm_layer import generate_insights
+from src.llm_layer import generate_insights, suggest_genes_for_perturbation
 
+# Page config
 st.set_page_config(page_title="Synthovion", layout="wide")
 st.title("🧬 Synthovion: MS Lesion Simulation & Insights")
 
@@ -16,21 +17,15 @@ drug_effectiveness = st.sidebar.slider("Drug Effectiveness", 0.0, 1.0, 0.5)
 gene_input = st.sidebar.text_input("Hypothetical Genes (comma-separated)", "GeneA,GeneB,GeneC")
 gene_list = [g.strip() for g in gene_input.split(",") if g.strip()]
 
-# Initialize session state
-if "lesion_matrix" not in st.session_state:
-    st.session_state.lesion_matrix = None
-if "days" not in st.session_state:
-    st.session_state.days = None
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-# --- Run Simulation ---
+# Run simulation button
 if st.button("Run Simulation"):
+    # Random gene effects for simulation
     gene_factors = {
-        g: {"immune": np.random.uniform(-0.2,0.2), "neuron": np.random.uniform(-0.2,0.2)}
+        g: {"immune": np.random.uniform(-0.2, 0.2), "neuron": np.random.uniform(0.8, 1.2)}
         for g in gene_list
     }
 
+    # Simulate cohort
     days, lesion_matrix = simulate_cohort(
         num_patients=num_patients,
         observation_days=observation_days,
@@ -38,47 +33,42 @@ if st.button("Run Simulation"):
         gene_factors=gene_factors
     )
 
-    # Store in session state
-    st.session_state.lesion_matrix = lesion_matrix
-    st.session_state.days = days
-    st.success("Simulation complete!")
+    # Suggest gene perturbations
+    suggested_genes = suggest_genes_for_perturbation(lesion_matrix, num_genes=3)
 
-# --- Tabs ---
-tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Chat Insights"])
+    # Tabs for visualization and chat
+    tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Chat Insights", "Gene Perturbations"])
 
-# Trajectories Tab
-with tabs[0]:
-    st.subheader("MS Lesion Trajectories")
-    if st.session_state.lesion_matrix is not None:
-        st.pyplot(plot_lesion_matrix(st.session_state.days, st.session_state.lesion_matrix))
-    else:
-        st.info("Run the simulation first to see lesion trajectories.")
+    # --- Lesion Trajectories ---
+    with tabs[0]:
+        st.subheader("MS Lesion Trajectories (first 10 patients)")
+        st.pyplot(plot_lesion_matrix(days, lesion_matrix, max_patients=min(10, num_patients)))
 
-# Kaplan-Meier Tab
-with tabs[1]:
-    st.subheader("Lesion-Free Survival (Synthetic Kaplan-Meier)")
-    if st.session_state.lesion_matrix is not None:
-        st.pyplot(plot_kaplan_meier(st.session_state.lesion_matrix))
-    else:
-        st.info("Run the simulation first to see Kaplan-Meier curve.")
+    # --- Kaplan-Meier ---
+    with tabs[1]:
+        st.subheader("Lesion-Free Survival (Synthetic Kaplan-Meier)")
+        st.pyplot(plot_kaplan_meier(lesion_matrix))
 
-# Chat Insights Tab
-with tabs[2]:
-    st.subheader("Simulation Insights Chat")
-    if st.session_state.lesion_matrix is None:
-        st.info("Run the simulation first to enable chat insights.")
-    else:
-        with st.form("chat_form", clear_on_submit=False):
-            user_input = st.text_input("Ask a question:")
-            submitted = st.form_submit_button("Send")
-            if submitted and user_input:
-                try:
-                    answer = generate_insights(st.session_state.lesion_matrix, top_genes=gene_list)
-                except Exception as e:
-                    answer = f"Error generating insights: {str(e)}"
-                st.session_state.chat_history.append({"user": user_input, "bot": answer})
+    # --- Chat Insights ---
+    with tabs[2]:
+        st.subheader("Simulation Insights Chat")
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
-        # Display chat history
+        user_question = st.text_input("Ask a question about the simulation:", key="user_input")
+        if st.button("Send Question", key="send_question"):
+            if user_question:
+                answer = generate_insights(lesion_matrix, top_genes=gene_list, user_question=user_question)
+                st.session_state.chat_history.append({"user": user_question, "bot": answer})
+
+        # Display chat history in order
         for chat in st.session_state.chat_history:
             st.markdown(f"**You:** {chat['user']}")
             st.markdown(f"**Insights:** {chat['bot']}")
+
+    # --- Suggested Gene Perturbations ---
+    with tabs[3]:
+        st.subheader("Suggested Gene Perturbations")
+        st.markdown("These are hypothetical gene perturbations that may reduce lesions:")
+        for gene, effects in suggested_genes.items():
+            st.markdown(f"- **{gene}**: immune effect = {effects['immune']}, neuron effect = {effects['neuron']}")
