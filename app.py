@@ -42,6 +42,7 @@ if st.button("Run Simulation"):
     st.session_state.suggested_genes = suggest_genes_for_perturbation(lesion_matrix, gene_list)
 
 # ---------------- Tabs ----------------
+# ---------------- Tabs ----------------
 if "lesion_matrix" in st.session_state:
 
     tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Chat Insights", "Gene Perturbations"])
@@ -83,5 +84,10 @@ if "lesion_matrix" in st.session_state:
     with tabs[3]:
         st.subheader("Suggested Gene Perturbations")
         st.markdown("These are hypothetical gene perturbations that may reduce lesions:")
-        for gene, effects in st.session_state.suggested_genes.items():
-            st.markdown(f"- {gene}: immune effect = {effects['immune']}, neuron effect = {effects['neuron']}")
+
+        # Safety check: ensure suggested_genes is not None
+        if st.session_state.get("suggested_genes"):
+            for gene, effects in st.session_state.suggested_genes.items():
+                st.markdown(f"- {gene}: immune effect = {effects['immune']}, neuron effect = {effects['neuron']}")
+        else:
+            st.markdown("Run the simulation first to see gene perturbations.")
