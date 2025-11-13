@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import numpy as np
 from src.simulation import simulate_cohort
@@ -7,7 +8,7 @@ from src.llm_layer import generate_insights
 st.set_page_config(page_title="Synthovion", layout="wide")
 st.title("🧬 Synthovion: MS Lesion Simulation & Insights")
 
-# --- Sidebar inputs ---
+# Sidebar inputs
 st.sidebar.header("Simulation Parameters")
 num_patients = st.sidebar.slider("Number of Patients", 5, 50, 20)
 observation_days = st.sidebar.slider("Observation Days", 10, 50, 20)
@@ -15,9 +16,16 @@ drug_effectiveness = st.sidebar.slider("Drug Effectiveness", 0.0, 1.0, 0.5)
 gene_input = st.sidebar.text_input("Hypothetical Genes (comma-separated)", "GeneA,GeneB,GeneC")
 gene_list = [g.strip() for g in gene_input.split(",") if g.strip()]
 
-# --- Run simulation ---
+# Initialize session state
+if "lesion_matrix" not in st.session_state:
+    st.session_state.lesion_matrix = None
+if "days" not in st.session_state:
+    st.session_state.days = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# --- Run Simulation ---
 if st.button("Run Simulation"):
-    # Random gene effects
     gene_factors = {
         g: {"immune": np.random.uniform(-0.2,0.2), "neuron": np.random.uniform(-0.2,0.2)}
         for g in gene_list
@@ -30,37 +38,47 @@ if st.button("Run Simulation"):
         gene_factors=gene_factors
     )
 
-    # --- Tabs ---
-    tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Chat Insights"])
+    # Store in session state
+    st.session_state.lesion_matrix = lesion_matrix
+    st.session_state.days = days
+    st.success("Simulation complete!")
 
-    # --- Tab 1: Lesion trajectories ---
-    with tabs[0]:
-        st.subheader("MS Lesion Trajectories")
-        st.pyplot(plot_lesion_matrix(days, lesion_matrix))
+# --- Tabs ---
+tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Chat Insights"])
 
-    # --- Tab 2: Kaplan-Meier ---
-    with tabs[1]:
-        st.subheader("Lesion-Free Survival (Synthetic Kaplan-Meier)")
-        st.pyplot(plot_kaplan_meier(lesion_matrix, threshold=0.5))  # lower threshold
+# Trajectories Tab
+with tabs[0]:
+    st.subheader("MS Lesion Trajectories")
+    if st.session_state.lesion_matrix is not None:
+        st.pyplot(plot_lesion_matrix(st.session_state.days, st.session_state.lesion_matrix))
+    else:
+        st.info("Run the simulation first to see lesion trajectories.")
 
-    # --- Tab 3: Chat ---
-    with tabs[2]:
-        st.subheader("Simulation Insights Chat")
+# Kaplan-Meier Tab
+with tabs[1]:
+    st.subheader("Lesion-Free Survival (Synthetic Kaplan-Meier)")
+    if st.session_state.lesion_matrix is not None:
+        st.pyplot(plot_kaplan_meier(st.session_state.lesion_matrix))
+    else:
+        st.info("Run the simulation first to see Kaplan-Meier curve.")
 
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
+# Chat Insights Tab
+with tabs[2]:
+    st.subheader("Simulation Insights Chat")
+    if st.session_state.lesion_matrix is None:
+        st.info("Run the simulation first to enable chat insights.")
+    else:
+        with st.form("chat_form", clear_on_submit=False):
+            user_input = st.text_input("Ask a question:")
+            submitted = st.form_submit_button("Send")
+            if submitted and user_input:
+                try:
+                    answer = generate_insights(st.session_state.lesion_matrix, top_genes=gene_list)
+                except Exception as e:
+                    answer = f"Error generating insights: {str(e)}"
+                st.session_state.chat_history.append({"user": user_input, "bot": answer})
 
-        user_input = st.text_input("Ask a question:", key="chat_input")
-
-        if st.button("Send", key="send_btn") and user_input.strip():
-            answer = generate_insights(lesion_matrix, top_genes=gene_list, user_question=user_input)
-            if isinstance(answer, dict) and "text" in answer:
-                answer = answer["text"]
-            elif not isinstance(answer, str):
-                answer = str(answer)
-            st.session_state.chat_history.append({"user": user_input, "bot": answer})
-
+        # Display chat history
         for chat in st.session_state.chat_history:
             st.markdown(f"**You:** {chat['user']}")
             st.markdown(f"**Insights:** {chat['bot']}")
-            st.markdown("---")
