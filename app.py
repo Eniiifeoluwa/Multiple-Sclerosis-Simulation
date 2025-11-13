@@ -1,73 +1,65 @@
 import streamlit as st
+import numpy as np
+import pandas as pd
+from lifelines import KaplanMeierFitter
 from src.simulation import simulate_cohort
 from src.llm_layer import generate_insights, suggest_genes_for_perturbation, memory
-from src.utils import plot_lesion_matrix, plot_kaplan_meier
-import json
 
-st.set_page_config(page_title="MS Simulation + ChatGroq Insights", layout="wide")
-st.title("MS Simulation + ChatGroq with Memory")
+st.set_page_config(page_title="MS Simulation + KM + ChatGroq", layout="wide")
+st.title("🧬 MS Simulation, Kaplan-Meier, & ChatGroq Insights")
 
-# --- Inputs ---
-num_patients = st.slider("Number of patients", 10, 100, 50, 5)
-timesteps = st.slider("Timesteps", 10, 100, 50, 5)
-drug_effectiveness = st.slider("Drug effectiveness", 0.0, 1.0, 0.2, 0.05)
-simulate_genes = st.checkbox("Initial gene perturbations", value=False)
+# --- Layman-friendly inputs ---
+num_patients = st.slider("Number of simulated patients", 5, 50, 20)
+duration = st.slider("Simulation duration (days)", 10, 100, 50)
+treatment_strength = st.slider("Treatment strength (0=none, 1=full)", 0.0, 1.0, 0.2, 0.05)
+remission_chance = st.slider("Remission chance per day", 0.0, 0.5, 0.05, 0.01)
+immune_variability = st.slider("Immune activity variability", 0.0, 0.5, 0.1, 0.05)
 
+simulate_genes = st.checkbox("Use initial gene perturbations", value=True)
 gene_factors = None
 if simulate_genes:
     gene_factors = {
-        "GeneA": {"immune": 0.1, "neuron": -0.05},
-        "GeneB": {"immune": -0.05, "neuron": 0.1},
+        "GeneA": {"immune": np.random.uniform(-0.1,0.1), "neuron": np.random.uniform(-0.1,0.1)},
+        "GeneB": {"immune": np.random.uniform(-0.1,0.1), "neuron": np.random.uniform(-0.1,0.1)},
     }
 
-grok_api_key = st.text_input("Enter your ChatGroq API Key:", type="password")
-
 # --- Run Simulation ---
-if st.button("Run Simulation + ChatGroq"):
+if st.button("Run Simulation"):
     times, lesion_matrix = simulate_cohort(
         num_patients=num_patients,
-        timesteps=timesteps,
-        drug_effectiveness=drug_effectiveness,
-        gene_factors=gene_factors
+        timesteps=duration,
+        drug_effectiveness=treatment_strength,
+        gene_factors=gene_factors,
+        remission_chance=remission_chance,
+        immune_variability=immune_variability
     )
 
-    st.subheader("Initial Lesion Trajectories")
-    plot_lesion_matrix(times, lesion_matrix, max_patients=min(10, num_patients))
-    plot_kaplan_meier(lesion_matrix, threshold=5)
+    # --- Layman-friendly summary of lesion trajectories ---
+    st.subheader("📊 Lesion Trajectories Summary")
+    summary_text = ""
+    for i in range(min(5, num_patients)):
+        lesions = lesion_matrix[i]
+        summary_text += f"Patient {i+1}: Lesions started at {lesions[0]:.1f}, peaked at {lesions.max():.1f}, ended at {lesions[-1]:.1f}.\n"
+    st.text(summary_text)
 
-    st.subheader("ChatGroq Insights")
-    if grok_api_key:
-        with st.spinner("Generating insights via ChatGroq…"):
-            insights = generate_insights(lesion_matrix, top_genes=list(gene_factors.keys()) if gene_factors else None, api_key=grok_api_key)
-        st.text_area("LLM Output", insights, height=300)
+    # --- Kaplan-Meier Plot ---
+    st.subheader("📈 Lesion-Free Probability (Kaplan-Meier)")
+    event_observed = np.any(lesion_matrix > 0, axis=1).astype(int)  # 1 if patient ever had lesions
+    kmf = KaplanMeierFitter()
+    kmf.fit(durations=np.full(num_patients, duration), event_observed=event_observed)
+    st.line_chart(pd.DataFrame({
+        "Days": np.arange(duration),
+        "Probability Lesion-Free": kmf.survival_function_.values.flatten()
+    }))
 
-        st.subheader("ChatGroq Suggested Gene Perturbations")
-        with st.spinner("Asking ChatGroq for new gene perturbations…"):
-            suggested_genes = suggest_genes_for_perturbation(lesion_matrix, num_genes=3, api_key=grok_api_key)
-        st.json(suggested_genes)
+    # --- ChatGroq Insights ---
+    st.subheader("💬 ChatGroq Insights")
+    insights = generate_insights(lesion_matrix, top_genes=list(gene_factors.keys()) if gene_factors else None)
+    st.markdown(f"**ChatGroq:** {insights}")
 
-        if suggested_genes:
-            st.subheader("Simulation with LLM-Suggested Gene Perturbations")
-            times2, lesion_matrix2 = simulate_cohort(
-                num_patients=num_patients,
-                timesteps=timesteps,
-                drug_effectiveness=drug_effectiveness,
-                gene_factors=suggested_genes
-            )
-            plot_lesion_matrix(times2, lesion_matrix2, max_patients=min(10, num_patients))
-            plot_kaplan_meier(lesion_matrix2, threshold=5)
-
-    # Save memory (optional)
-    if st.checkbox("Save conversation memory"):
-        with open("chat_memory.json", "w") as f:
-            json.dump(memory.chat_memory.messages, f)
-        st.success("Memory saved to chat_memory.json")
-
-    # Load memory (optional)
-    if st.checkbox("Load previous conversation memory"):
-        try:
-            with open("chat_memory.json", "r") as f:
-                memory.chat_memory.messages = json.load(f)
-            st.success("Memory loaded!")
-        except:
-            st.error("Failed to load memory")
+    # --- Suggested gene perturbations ---
+    suggested_genes = suggest_genes_for_perturbation(lesion_matrix, num_genes=3)
+    if suggested_genes:
+        st.markdown("**ChatGroq Suggested Gene Perturbations:**")
+        for gene, effects in suggested_genes.items():
+            st.markdown(f"- **{gene}** → Immune effect: {effects['immune']:.2f}, Neuron effect: {effects['neuron']:.2f}")
