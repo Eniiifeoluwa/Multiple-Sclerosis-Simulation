@@ -17,51 +17,28 @@ if "chat_memory" not in st.session_state:
         return_messages=True
     )
 
-def generate_insights(lesion_matrix, top_genes=None, user_question=None):
-    """
-    Generate insights for MS lesion simulation in layman terms.
-    Can also answer user questions.
-    """
-    top_genes = top_genes or ["GeneA", "GeneB", "GeneC"]
-    
-    # If user_question provided, ask about it; otherwise provide general summary
-    if user_question:
-        prompt_text = f"""
+def generate_insights(lesion_matrix, top_genes=None, user_question=""):
+    prompt_text = f"""
 You are an expert in Multiple Sclerosis simulations.
 Here are the lesion trajectories for the first 5 patients:
 {lesion_matrix[:5].tolist()}
 
-Hypothetical genes affecting the system: {top_genes}
+Hypothetical genes affecting the system: {top_genes or ['GeneA','GeneB','GeneC']}
 
-Answer this question clearly for a lay audience:
+Answer the following question in plain text:
 {user_question}
 """
-    else:
-        prompt_text = f"""
-You are an expert in Multiple Sclerosis simulations.
-Here are the lesion trajectories for the first 5 patients:
-{lesion_matrix[:5].tolist()}
-
-Hypothetical genes affecting the system: {top_genes}
-
-Provide a clear, layman-friendly explanation of:
-1. The patterns of lesion development.
-2. Possible therapeutic targets or interventions.
-3. Any interesting predictions or risks.
-"""
-    # Setup LLM
     llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.1-8b-instant")
     prompt = PromptTemplate(input_variables=["user_input"], template="{user_input}")
     chain = LLMChain(llm=llm, prompt=prompt, memory=st.session_state.chat_memory)
-    
-    try:
-        response = chain.invoke({"user_input": prompt_text})
-        if not isinstance(response, str):
-            response = str(response)
-    except Exception as e:
-        response = f"LLM could not generate insights: {str(e)}"
-    
-    return response
+
+    result = chain.invoke({"user_input": prompt_text})
+
+    # Always return as plain text
+    if isinstance(result, dict) and "text" in result:
+        return result["text"]
+    return str(result)
+
 
 
 def suggest_genes_for_perturbation(lesion_matrix, num_genes=3):

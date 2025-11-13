@@ -2,12 +2,12 @@ import streamlit as st
 import numpy as np
 from src.simulation import simulate_cohort
 from src.utils import plot_lesion_matrix, plot_kaplan_meier
-from src.llm_layer import generate_insights, suggest_genes_for_perturbation
+from src.llm_layer import generate_insights
 
 st.set_page_config(page_title="Synthovion", layout="wide")
 st.title("🧬 Synthovion: MS Lesion Simulation & Insights")
 
-# Sidebar
+# --- Sidebar inputs ---
 st.sidebar.header("Simulation Parameters")
 num_patients = st.sidebar.slider("Number of Patients", 5, 50, 20)
 observation_days = st.sidebar.slider("Observation Days", 10, 50, 20)
@@ -15,57 +15,52 @@ drug_effectiveness = st.sidebar.slider("Drug Effectiveness", 0.0, 1.0, 0.5)
 gene_input = st.sidebar.text_input("Hypothetical Genes (comma-separated)", "GeneA,GeneB,GeneC")
 gene_list = [g.strip() for g in gene_input.split(",") if g.strip()]
 
-# --- Initialize chat history ---
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-# --- Run Simulation ---
+# --- Run simulation ---
 if st.button("Run Simulation"):
+    # Random gene effects
     gene_factors = {
         g: {"immune": np.random.uniform(-0.2,0.2), "neuron": np.random.uniform(-0.2,0.2)}
         for g in gene_list
     }
+
     days, lesion_matrix = simulate_cohort(
         num_patients=num_patients,
         observation_days=observation_days,
         drug_effectiveness=drug_effectiveness,
         gene_factors=gene_factors
     )
-    st.session_state["lesion_matrix"] = lesion_matrix
-    st.session_state["days"] = days
 
-# --- Tabs ---
-tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Simulation Chat"])
+    # --- Tabs ---
+    tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Chat Insights"])
 
-# Lesion Trajectories Tab
-with tabs[0]:
-    st.subheader("MS Lesion Trajectories")
-    if "lesion_matrix" in st.session_state:
-        st.pyplot(plot_lesion_matrix(st.session_state["days"], st.session_state["lesion_matrix"]))
-    else:
-        st.info("Run the simulation to see lesion trajectories.")
+    # --- Tab 1: Lesion trajectories ---
+    with tabs[0]:
+        st.subheader("MS Lesion Trajectories")
+        st.pyplot(plot_lesion_matrix(days, lesion_matrix))
 
-# Kaplan-Meier Tab
-with tabs[1]:
-    st.subheader("Lesion-Free Survival")
-    if "lesion_matrix" in st.session_state:
-        st.pyplot(plot_kaplan_meier(st.session_state["lesion_matrix"]))
-    else:
-        st.info("Run the simulation to see survival plot.")
+    # --- Tab 2: Kaplan-Meier ---
+    with tabs[1]:
+        st.subheader("Lesion-Free Survival (Synthetic Kaplan-Meier)")
+        st.pyplot(plot_kaplan_meier(lesion_matrix, threshold=0.5))  # lower threshold
 
-# Chat Tab
-with tabs[2]:
-    st.subheader("Simulation Insights Chat")
-    user_input = st.text_input("Ask a question about the simulation:", key="chat_input")
+    # --- Tab 3: Chat ---
+    with tabs[2]:
+        st.subheader("Simulation Insights Chat")
 
-    if st.button("Send Question"):
-        if "lesion_matrix" not in st.session_state:
-            st.warning("Run the simulation first!")
-        elif user_input.strip():
-            response = generate_insights(st.session_state["lesion_matrix"], top_genes=gene_list)
-            st.session_state.chat_history.append({"user": user_input, "bot": response})
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
-    # Display conversation
-    for chat in st.session_state.chat_history:
-        st.markdown(f"**You:** {chat['user']}")
-        st.markdown(f"**Insights:** {chat['bot']}")
+        user_input = st.text_input("Ask a question:", key="chat_input")
+
+        if st.button("Send", key="send_btn") and user_input.strip():
+            answer = generate_insights(lesion_matrix, top_genes=gene_list, user_question=user_input)
+            if isinstance(answer, dict) and "text" in answer:
+                answer = answer["text"]
+            elif not isinstance(answer, str):
+                answer = str(answer)
+            st.session_state.chat_history.append({"user": user_input, "bot": answer})
+
+        for chat in st.session_state.chat_history:
+            st.markdown(f"**You:** {chat['user']}")
+            st.markdown(f"**Insights:** {chat['bot']}")
+            st.markdown("---")

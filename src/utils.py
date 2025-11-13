@@ -15,7 +15,7 @@ def plot_lesion_matrix(days, lesion_matrix, max_patients=10):
     ax.set_title("MS Lesion Progression (simulated)")
     return fig
 
-def plot_kaplan_meier(lesion_matrix, threshold=5):
+def plot_kaplan_meier(lesion_matrix, threshold=0.5):
     """Return a Matplotlib figure of synthetic Kaplan-Meier curve for Streamlit."""
     kmf = KaplanMeierFitter()
     n_patients, observation_days = lesion_matrix.shape
@@ -23,6 +23,7 @@ def plot_kaplan_meier(lesion_matrix, threshold=5):
     events = []
     for i in range(n_patients):
         lesion = lesion_matrix[i]
+        # Event happens when lesion >= threshold
         event_time = np.argmax(lesion >= threshold) + 1 if np.any(lesion >= threshold) else observation_days
         event_occurred = int(lesion[event_time-1] >= threshold)
         durations.append(event_time)
