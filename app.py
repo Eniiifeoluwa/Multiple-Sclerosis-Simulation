@@ -37,12 +37,12 @@ if st.button("Run Simulation"):
     # Trajectories
     with tabs[0]:
         st.subheader("MS Lesion Trajectories")
-        plot_lesion_matrix(days, lesion_matrix)
+        st.pyplot(plot_lesion_matrix(days, lesion_matrix))
 
     # Kaplan-Meier
     with tabs[1]:
         st.subheader("Lesion-Free Survival (Synthetic Kaplan-Meier)")
-        plot_kaplan_meier(lesion_matrix)
+        st.pyplot(plot_kaplan_meier(lesion_matrix))
 
     # Chat
     with tabs[2]:

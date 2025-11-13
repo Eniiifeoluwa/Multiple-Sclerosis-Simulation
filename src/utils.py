@@ -1,21 +1,22 @@
+# utils.py
 import matplotlib.pyplot as plt
 import pandas as pd
 from lifelines import KaplanMeierFitter
 import numpy as np
 
 def plot_lesion_matrix(days, lesion_matrix, max_patients=10):
-    """Plot lesion trajectories for first `max_patients` patients."""
+    """Return a Matplotlib figure of lesion trajectories for Streamlit."""
     df = pd.DataFrame(lesion_matrix[:max_patients].T, index=days)
-    plt.figure(figsize=(10,6))
+    fig, ax = plt.subplots(figsize=(10,6))
     for col in df.columns:
-        plt.plot(df.index, df[col], alpha=0.7)
-    plt.xlabel("Observation Days")
-    plt.ylabel("Lesion Count")
-    plt.title("MS Lesion Progression (simulated)")
-    plt.show()
+        ax.plot(df.index, df[col], alpha=0.7)
+    ax.set_xlabel("Observation Days")
+    ax.set_ylabel("Lesion Count")
+    ax.set_title("MS Lesion Progression (simulated)")
+    return fig
 
 def plot_kaplan_meier(lesion_matrix, threshold=5):
-    """Plot synthetic Kaplan-Meier curve for lesion-free survival."""
+    """Return a Matplotlib figure of synthetic Kaplan-Meier curve for Streamlit."""
     kmf = KaplanMeierFitter()
     n_patients, observation_days = lesion_matrix.shape
     durations = []
@@ -27,8 +28,9 @@ def plot_kaplan_meier(lesion_matrix, threshold=5):
         durations.append(event_time)
         events.append(event_occurred)
     kmf.fit(durations, event_observed=events)
-    kmf.plot_survival_function()
-    plt.title("Synthetic Kaplan-Meier: Lesion-free Survival")
-    plt.xlabel("Observation Days")
-    plt.ylabel("Probability lesion-free")
-    plt.show()
+    fig, ax = plt.subplots(figsize=(8,5))
+    kmf.plot_survival_function(ax=ax)
+    ax.set_title("Synthetic Kaplan-Meier: Lesion-free Survival")
+    ax.set_xlabel("Observation Days")
+    ax.set_ylabel("Probability lesion-free")
+    return fig
