@@ -50,20 +50,15 @@ Answer the following question in plain text:
     return str(result)
 
 
-def suggest_genes_for_perturbation(lesion_matrix, num_genes=3):
+def suggest_genes_for_perturbation(lesion_matrix, gene_list):
     """
-    Suggest hypothetical gene perturbations with random effects.
+    Suggest hypothetical gene perturbations using only user-defined genes.
     Returns a dictionary: gene -> {"immune": effect, "neuron": effect}
     """
-    possible_genes = [f"Gene{chr(i)}" for i in range(65, 91)]  # GeneA-GeneZ
-    chosen_genes = np.random.choice(possible_genes, num_genes, replace=False)
-    
-    gene_dict = {
-        gene: {
+    gene_dict = {}
+    for gene in gene_list:
+        gene_dict[gene] = {
             "immune": float(np.round(np.random.uniform(-0.2, 0.2), 3)),
             "neuron": float(np.round(np.random.uniform(-0.2, 0.2), 3))
         }
-        for gene in chosen_genes
-    }
-    
     return gene_dict

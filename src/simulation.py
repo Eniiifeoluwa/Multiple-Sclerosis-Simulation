@@ -2,17 +2,7 @@ import numpy as np
 
 def simulate_cohort(num_patients=20, observation_days=20, drug_effectiveness=0.5, gene_factors=None):
     """
-    Simulate lesion trajectories for a cohort of patients.
-
-    Parameters:
-    - num_patients: int, number of patients
-    - observation_days: int, number of days to simulate
-    - drug_effectiveness: float [0,1], overall drug effect
-    - gene_factors: dict, optional {"GeneA": {"immune": x, "neuron": y}, ...}
-
-    Returns:
-    - days: np.array of day numbers
-    - lesion_matrix: np.array of shape (num_patients, observation_days)
+    Simulate realistic MS lesion trajectories for a cohort of patients.
     """
     days = np.arange(1, observation_days + 1)
     lesion_matrix = np.zeros((num_patients, observation_days))
@@ -23,9 +13,12 @@ def simulate_cohort(num_patients=20, observation_days=20, drug_effectiveness=0.5
         neuron_resilience = np.random.uniform(0.8, 1.2)
 
         for t in range(observation_days):
+            # Stochastic flare-ups
+            flare = np.random.poisson(0.3)
+            
             # Base lesion dynamics
-            attack = np.random.uniform(0.5, 1.5) * immune_factor * (1 - drug_effectiveness)
-            recovery = neuron_resilience * np.random.uniform(0.3, 0.8)
+            attack = np.random.uniform(0.3, 1.0) * immune_factor * (1 - drug_effectiveness) + flare
+            recovery = neuron_resilience * np.random.uniform(0.2, 0.7)
 
             # Gene effects
             if gene_factors:
