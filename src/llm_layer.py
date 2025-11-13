@@ -28,7 +28,7 @@ def get_groq_api_key():
     return api_key
 
 
-def format_lesion_data(lesion_matrix, num_samples=5):
+def format_lesion_data(lesion_matrix, num_samples=-1):
     """Format lesion matrix data for LLM prompt."""
     sample_data = lesion_matrix[:num_samples]
     return "\n".join([
