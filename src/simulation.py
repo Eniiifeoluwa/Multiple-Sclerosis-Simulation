@@ -1,39 +1,39 @@
 import numpy as np
 
-class Patient:
-    def __init__(self, id, neuron_resilience=1.0, immune_activity=1.0):
-        self.id = id
-        self.neuron_resilience = neuron_resilience
-        self.immune_activity = immune_activity
-        self.lesion_count = 0
+def simulate_cohort(num_patients=20, observation_days=20, drug_effectiveness=0.5, gene_factors=None):
+    """
+    Simulate lesion trajectories for a cohort of patients.
 
-def simulate_cohort(num_patients=20, timesteps=50, drug_effectiveness=0.2,
-                    gene_factors=None, remission_chance=0.05, immune_variability=0.1):
-    patients = [Patient(
-        i,
-        neuron_resilience=np.random.uniform(0.8, 1.2),
-        immune_activity=np.random.uniform(0.8, 1.2)
-    ) for i in range(num_patients)]
+    Parameters:
+    - num_patients: int, number of patients
+    - observation_days: int, number of days to simulate
+    - drug_effectiveness: float [0,1], overall drug effect
+    - gene_factors: dict, optional {"GeneA": {"immune": x, "neuron": y}, ...}
 
-    lesion_matrix = np.zeros((num_patients, timesteps))
+    Returns:
+    - days: np.array of day numbers
+    - lesion_matrix: np.array of shape (num_patients, observation_days)
+    """
+    days = np.arange(1, observation_days + 1)
+    lesion_matrix = np.zeros((num_patients, observation_days))
 
-    for t in range(timesteps):
-        for i, p in enumerate(patients):
-            attack = p.immune_activity * np.random.uniform(1-immune_variability, 1+immune_variability)
-            recovery = p.neuron_resilience * np.random.uniform(0.3, 0.8)
+    for i in range(num_patients):
+        lesion = 0
+        immune_factor = np.random.uniform(0.8, 1.2)
+        neuron_resilience = np.random.uniform(0.8, 1.2)
 
+        for t in range(observation_days):
+            # Base lesion dynamics
+            attack = np.random.uniform(0.5, 1.5) * immune_factor * (1 - drug_effectiveness)
+            recovery = neuron_resilience * np.random.uniform(0.3, 0.8)
+
+            # Gene effects
             if gene_factors:
                 for gene, effect in gene_factors.items():
-                    attack *= 1 + effect.get("immune",0)
-                    recovery *= 1 + effect.get("neuron",0)
+                    attack *= 1 + effect.get("immune", 0)
+                    recovery *= 1 + effect.get("neuron", 0)
 
-            delta = attack - recovery
-            p.lesion_count += max(delta * (1 - drug_effectiveness),0)
+            lesion = max(0, lesion + attack - recovery)
+            lesion_matrix[i, t] = lesion
 
-            # Random remission
-            if np.random.rand() < remission_chance:
-                p.lesion_count = max(p.lesion_count - np.random.uniform(0.5, 1.0), 0)
-
-            lesion_matrix[i, t] = p.lesion_count
-
-    return np.arange(timesteps), lesion_matrix
+    return days, lesion_matrix

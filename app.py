@@ -1,70 +1,61 @@
+# app.py
 import streamlit as st
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from lifelines import KaplanMeierFitter
-
 from src.simulation import simulate_cohort
 from src.utils import plot_lesion_matrix, plot_kaplan_meier
 from src.llm_layer import generate_insights, suggest_genes_for_perturbation
 
-st.set_page_config(page_title="Synthovion: MS Simulation + ChatGroq", layout="wide")
+st.set_page_config(page_title="Synthovion", layout="wide")
+st.title("🧬 Synthovion: MS Lesion Simulation & Insights")
 
-st.title("🧬 Synthovion: Multiple Sclerosis Simulation & ChatGroq Insights")
+# Sidebar inputs
+st.sidebar.header("Simulation Parameters")
+num_patients = st.sidebar.slider("Number of Patients", 5, 50, 20)
+observation_days = st.sidebar.slider("Observation Days", 10, 50, 20)
+drug_effectiveness = st.sidebar.slider("Drug Effectiveness", 0.0, 1.0, 0.5)
+gene_input = st.sidebar.text_input("Hypothetical Genes (comma-separated)", "GeneA,GeneB,GeneC")
+gene_list = [g.strip() for g in gene_input.split(",") if g.strip()]
 
-# --- Sidebar for simulation parameters ---
-st.sidebar.header("Simulation Settings")
-num_patients = st.sidebar.slider("Number of patients", min_value=10, max_value=100, value=20, step=5)
-timesteps = st.sidebar.slider("Time steps", min_value=10, max_value=100, value=30, step=5)
-drug_effectiveness = st.sidebar.slider("Drug Effectiveness", min_value=0.0, max_value=1.0, value=0.5)
-gene_factors = st.sidebar.text_area("Hypothetical gene effects (comma-separated)", value="GeneA,GeneB,GeneC")
+# Run simulation
+if st.button("Run Simulation"):
+    # Random gene effects
+    gene_factors = {
+        g: {"immune": np.random.uniform(-0.2,0.2), "neuron": np.random.uniform(-0.2,0.2)}
+        for g in gene_list
+    }
 
-# --- Run Simulation ---
-if st.button("Run Simulation + ChatGroq"):
-    # Simulate cohort
-    times, lesion_matrix = simulate_cohort(
+    days, lesion_matrix = simulate_cohort(
         num_patients=num_patients,
-        timesteps=timesteps,
+        observation_days=observation_days,
         drug_effectiveness=drug_effectiveness,
-        gene_factors=gene_factors.split(","),
+        gene_factors=gene_factors
     )
 
-    # --- Tabs ---
-    tabs = st.tabs(["📈 Lesion Trajectories", "🩺 Kaplan-Meier", "💬 ChatGroq Insights", "🎲 Random Predictions"])
+    # Tabs
+    tabs = st.tabs(["Lesion Trajectories", "Kaplan-Meier", "Chat Insights"])
 
-    # --- Tab 1: Lesion trajectories ---
+    # Trajectories
     with tabs[0]:
         st.subheader("MS Lesion Trajectories")
-        plot_lesion_matrix(times, lesion_matrix, max_patients=min(num_patients, 10))
-        st.caption("Each line represents a simulated patient's lesion count over time.")
+        plot_lesion_matrix(days, lesion_matrix)
 
-    # --- Tab 2: Kaplan-Meier ---
+    # Kaplan-Meier
     with tabs[1]:
-        st.subheader("Kaplan-Meier: Lesion-Free Survival")
-        plot_kaplan_meier(lesion_matrix, threshold=5)
-        st.caption("Probability of remaining below threshold lesions over time.")
+        st.subheader("Lesion-Free Survival (Synthetic Kaplan-Meier)")
+        plot_kaplan_meier(lesion_matrix)
 
-    # --- Tab 3: ChatGroq insights ---
+    # Chat
     with tabs[2]:
-        st.subheader("ChatGroq Insights")
-        try:
-            insights = generate_insights(lesion_matrix, top_genes=gene_factors.split(","))
-            st.text_area("ChatGroq Output", insights, height=300)
+        st.subheader("Simulation Insights Chat")
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
 
-            perturbations = suggest_genes_for_perturbation(lesion_matrix, num_genes=3)
-            st.subheader("Suggested Gene Perturbations")
-            st.json(perturbations)
-        except Exception as e:
-            st.error(f"ChatGroq failed: {e}")
+        user_input = st.text_input("Ask a question:")
+        if st.button("Send Question"):
+            if user_input:
+                answer = generate_insights(lesion_matrix, top_genes=gene_list)
+                st.session_state.chat_history.append({"user": user_input, "bot": answer})
 
-    # --- Tab 4: Random Predictions ---
-    with tabs[3]:
-        st.subheader("Randomized New Patient Simulation")
-        n_new = st.slider("Number of new patients", min_value=1, max_value=20, value=5)
-        times_new, lesion_matrix_new = simulate_cohort(
-            num_patients=n_new,
-            timesteps=timesteps,
-            drug_effectiveness=drug_effectiveness,
-            gene_factors=gene_factors.split(","),
-        )
-        plot_lesion_matrix(times_new, lesion_matrix_new, max_patients=n_new)
+        for chat in st.session_state.chat_history:
+            st.markdown(f"**You:** {chat['user']}")
+            st.markdown(f"**Insights:** {chat['bot']}")
